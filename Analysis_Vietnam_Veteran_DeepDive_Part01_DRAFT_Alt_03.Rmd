@@ -1,0 +1,1398 @@
+---
+title: \thispagestyle{empty}\advance\leftskip-3cm\includegraphics{Slide_Cover.pdf}
+author: ""
+date: "November 30, 2017"
+output: 
+  beamer_presentation:
+    latex_engine: xelatex
+    fig_crop: no
+    fonttheme: professionalfonts
+    template: default-beamer-twocol.tex
+fontsize: 8pt
+mainfont: Calibri
+header-includes:
+  - \usepackage{booktabs}
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+# Load libraries and data
+library(survey)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(knitr)
+library(kableExtra)
+
+opts_chunk$set(echo = FALSE )
+
+#Data - Vietnam Era  Veterans Survey Design Object
+viet_design <- readRDS("Data_per115_viet_design.Rds")
+
+#Graph stuff
+#create var to reset graphical parameters
+opar <-par(no.readonly=TRUE)
+
+#Paired color vector to comparisons 
+mycols <- brewer.pal(n=12, name = "Paired")
+set1cols <- brewer.pal(n=9, name = "Set1")
+
+histcols <- brewer.pal(n=12, name = "Set3")
+
+income.range <- c(seq(0, 100000, 20000), Inf)
+
+#total number of Veterans by Veteran Period of Service (VPS) (All VPS are vietnam)
+viet.vps <- svytotal(~factor(VPS), viet_design, na.rm = TRUE)
+viet.tot <- sum(viet.vps)
+
+#Median Age of Vietnam Veterans
+age.median <- svyquantile(~AGEP, viet_design, quantiles = c(0.5))
+
+```
+
+```{r esr-setup, include=FALSE}
+#read ESR data (this dataset was created using the Code_ESR_Trend_Data_Prep_DF.R script)
+esr.pct <- readRDS("Data_ESR_Mean_DF_2011_2015.Rds")
+esr.tot <- readRDS("Data_ESR_Total_DF_2011_2015.Rds")
+
+#convert to percentage (multiply by 100)
+esr.pct$Mean <- esr.pct$Mean * 100
+
+#Calculate 2015 to 2011 PERCENTAGE delta for all ESR Levels 
+#subset for 2011 and 2015
+esr1115 <- filter(esr.pct, Year == 2011 | Year == 2015) %>% 
+  select(Year, EsrLvl, Mean)
+
+#convert Year variable to column (one for 2011 and one for 2015)
+esr1115 <-   tidyr::spread(esr1115, Year, Mean)
+
+#Calculate 2015 to 2011 TOTAL delta for all ESR Levels 
+#subset for 2011 and 2015
+esr.tot <- filter(esr.tot, Year == 2011 | Year == 2015) %>% 
+  select(Year, EsrLvl, Total)
+
+#convert Year variable to column (one for 2011 and one for 2015)
+esr.tot <-   tidyr::spread(esr.tot, Year, Total)
+
+#calcualate the difference between 2015 and 2011
+Diff <-  esr.tot$`2015` - esr.tot$`2011`
+
+#ESR mean for 2015
+esr <- svymean(~factor(ESR), viet_design, na.rm = TRUE) * 100
+
+```
+
+```{r inc-rank-bar-setup, include=FALSE}
+#Calculate whether a Vet gets an income or not (0 = No, 1= Yes)
+viet_design <- update(viet_design,
+                      PINCP0 = ifelse(PINCP <= 0, 0, 1),
+                      PERNP0 = ifelse(PERNP <= 0, 0, 1),
+                      WAGP0 = ifelse(WAGP <= 0, 0, 1),
+                      INTP0 = ifelse(INTP <= 0, 0, 1),
+                      OIP0 = ifelse(OIP <= 0, 0, 1),
+                      PAP0 = ifelse(PAP <= 0, 0, 1),
+                      RETP0 = ifelse(RETP <= 0, 0, 1),
+                      SEMP0 = ifelse(SEMP <= 0, 0, 1),
+                      SSP0 = ifelse(SSP <= 0, 0, 1),
+                      SSIP0 = ifelse(SSIP <= 0, 0, 1)
+                      )
+
+pincp0 <- svymean(~factor(PINCP0), viet_design, na.rm = TRUE) * 100
+pernp0 <- svymean(~factor(PERNP0), viet_design, na.rm = TRUE) * 100
+wagp0 <- svymean(~factor(WAGP0), viet_design, na.rm = TRUE) * 100
+intp0 <- svymean(~factor(INTP0), viet_design, na.rm = TRUE) * 100
+oip0 <- svymean(~factor(OIP0), viet_design, na.rm = TRUE) * 100
+pap0 <- svymean(~factor(PAP0), viet_design, na.rm = TRUE) * 100
+retp0 <- svymean(~factor(RETP0), viet_design, na.rm = TRUE) * 100
+semp0 <- svymean(~factor(SEMP0), viet_design, na.rm = TRUE) * 100
+ssp0 <- svymean(~factor(SSP0), viet_design, na.rm = TRUE) * 100
+ssip0 <- svymean(~factor(SSIP0), viet_design, na.rm = TRUE) * 100
+
+
+#cross tab of PINCP and PERNP
+inc.ern <- svytable(~factor(PINCP0) + factor(PERNP0), viet_design, Ntotal = 100)
+inc.ern <- round(inc.ern, digits = 0)
+
+rownames(inc.ern) <- c("No", "Yes")
+colnames(inc.ern) <- c("No", "Yes")
+
+Vars <- c("WAGP", "INTP", "OIP", "PAP", "RETP", "SEMP", "SSP", "SSIP")
+Per <- c(wagp0[2], intp0[2], oip0[2], pap0[2], retp0[2], semp0[2], ssp0[2], ssip0[2])
+
+incvets <- data.frame(Vars, Per)
+incvets <- incvets[order(incvets$Per),]
+
+
+#Calculate Median of income variables
+pincp.qt <- svyquantile(~PINCP, viet_design, quantiles = c(0.5))
+pernp.qt <- svyquantile(~PERNP, viet_design, quantiles = c(0.5))
+ssp.qt <- svyquantile(~SSP, viet_design, quantiles = c(0.5))
+retp.qt <- svyquantile(~RETP, viet_design, quantiles = c(0.5))
+wagp.qt <- svyquantile(~WAGP, viet_design, quantiles = c(0.5))
+intp.qt <- svyquantile(~INTP, viet_design, quantiles = c(0.5, 0.75))
+oip.qt <- svyquantile(~OIP, viet_design, quantiles = c(0.75))
+semp.qt <- svyquantile(~SEMP, viet_design, quantiles = c(0.5))
+ssip.qt <- svyquantile(~SSIP, viet_design, quantiles = c(0.75))
+pap.qt <- svyquantile(~PAP, viet_design, quantiles = c(0.5))
+
+#Calculate Average/mean of income variables
+ssp.avg <- round(svymean(~SSP, viet_design, na.rm = TRUE), digits = 0)
+retp.avg <- round(svymean(~RETP, viet_design, na.rm = TRUE), digits = 0)
+wagp.avg <- round(svymean(~WAGP, viet_design, na.rm = TRUE), digits = 0)
+#ONLY for those who actually get an income. 
+oip.avg <- round(svymean(~(OIP), subset(viet_design, OIP > 0), na.rm = TRUE), digits = 0)
+
+```
+
+```{r ins-setup, include=FALSE}
+
+# svymean of HICOV variable
+ins <- svymean(~factor(HICOV), viet_design, na.rm = TRUE) * 100
+
+#Create new variable to group Public and Private insurance coverage.
+#PUBLIC Insurance Coverage
+viet_design <- update(viet_design, 
+                      PUBCOV = ifelse(HINS3 == 1 | HINS4 == 1 | HINS6 == 1, "Covered", "Not Covered")
+                      )
+pubcov <- svymean(~factor(PUBCOV), viet_design) * 100
+
+#Private Insurance Coverage
+viet_design <- update(viet_design, 
+                      PRIVCOV = ifelse(HINS1 == 1 | HINS2 == 1 | HINS5 == 1, "Covered", "Not Covered")
+                      )
+privcov <- svymean(~factor(PRIVCOV), viet_design) * 100
+
+
+# SETUP of HINS svymeans for graphing
+hins1 <- svymean(~factor(HINS1), viet_design, na.rm = TRUE) * 100
+hins2 <- svymean(~factor(HINS2), viet_design, na.rm = TRUE) * 100
+hins3 <- svymean(~factor(HINS3), viet_design, na.rm = TRUE) * 100
+hins4 <- svymean(~factor(HINS4), viet_design, na.rm = TRUE) * 100
+hins5 <- svymean(~factor(HINS5), viet_design, na.rm = TRUE) * 100
+hins6 <- svymean(~factor(HINS6), viet_design, na.rm = TRUE) * 100
+hins7 <- svymean(~factor(HINS7), viet_design, na.rm = TRUE) * 100
+
+#Crosstab of Pub vs Pvt Coverage
+pub.pvt <- svytable(~factor(PUBCOV) + factor(PRIVCOV) , viet_design, Ntotal = 100)
+
+
+```
+
+## Introduction 
+
+* In July 2017, the National Center for Veteran Analysis and Statistics (NCVAS) published a [\textcolor{blue}{profile that provides a statistical overview of the demographic and socioeconomic characteristics of the Vietnam Era Veteran cohort}](https://www.va.gov/vetdata/docs/SpecialReports/Vietnam_Vet_Profile_Final.pdf). Given the in-depth nature of the American Community Survey (ACS) it was not possible to explore every variable. NCVAS now presents a collection of statistics and data visuals that provide more insights into the finances and health of Vietnam Veterans. In this deep-dive you will find a detailed view of the employment status, financial position, health care coverage and disabilities of Vietnam Veterans.
+\vspace{10pt}
+
+* The primary data source is the [\textcolor{blue}{2015 ACS Public Use Microdata Sample (PUMS)}](https://www.census.gov/programs-surveys/acs/data/pums.html). 
+    * The ACS is an ongoing survey that provides annual data on the social and economic characteristics of the U.S. population.
+    * The ACS uses a series of monthly samples to produce annually-updated data for the same small areas (census tracts and block groups) formerly surveyed via the decennial census long-form sample. 
+    
+    \vspace{5pt}
+* Vietnam War Veterans are identified through the variables Military Service (MIL) and Veteran Period of Service (VPS). A respondent is considered a Vietnam War Veteran when they answer *On active duty in the past, but not now* for the MIL variable and *Vietnam Era/Korean War/WWII, Vietnam War/Korean War or Vietnam War* for the VPS variable.
+
+
+
+## Vietnam Veterans are exiting the labor force in large numbers. From 2011 to 2015 Veterans not in the labor force increased by fifteen percent.
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r esr_graph-2015}
+#set graphical parameters and colors
+par(mar=c(5,10,4,2), cex=1.75,  col.axis="gray30")
+
+#barplot of ESR
+midpoints <- barplot(height = sort(esr),
+                     names.arg = c("Unemployed", "With Job NOT at Work\n(Civilian Employed)", "At Work\n(Civilian Employed)", "Not in Labor Force"),
+                     horiz = TRUE,
+                     col = mycols[c(7, 3, 5, 1)],
+                     border = NA,
+                     xlim = c(0,100),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+                     )
+
+
+#X-axis label
+mtext("Percentage of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+
+#custom labels 
+text(x = sort(esr) + 10, y = midpoints, labels = round(sort(esr), digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+\begin{itemize}
+\item As of 2015, there were `r format(viet.tot, big.mark = ",")` Vietnam War Veterans. Sixty-nine percent are not in the labor force and twenty-two percent are still at work.
+\newline
+\item The ACS has no explicit question on retirement status. The ACS treats retirement as a source of income. 
+\end{itemize}
+\columnsend
+
+\columnsbegin
+\column{.5\textwidth}
+\begin{itemize}
+\item `r format(Diff[4], big.mark = ",")` Veterans left the labor force from 2011 to 2015.
+\item Given their median age of `r age.median` years, the number of Veterans exiting the labor force should continue to rise.
+\item The difference in employment status from 2011 to 2015 is significant at the 95\% confidence level.  
+\end{itemize}
+
+\column{.5\textwidth}
+
+```{r esr_trend_graph}
+
+leg.lims <- c("Not in Labor Force", "At Work\n(Civilian Employed)", "With Job NOT at Work\n(Civilian Employed)", "Unemployed")
+
+#line graph
+ggplot(data = esr.pct, aes(x = Year, y = Mean, color = reorder(EsrLvl, -Mean), group = EsrLvl)) +
+  geom_line(size = 1, linetype = 1) +
+  geom_point(size = 1.75, shape = 19) +
+  scale_x_discrete(position = "top", expand = c(0, 0.1)) +
+  # scale_color_brewer(palette = "Dark2", direction = -1, labels = leg.lims) + 
+  scale_color_manual(values = mycols[c(1, 5, 3, 7)], labels = leg.lims) + 
+  scale_y_continuous(name = "Percentage of Vietnam Veterans", breaks = seq(0, 70, 10), limits = c(0, 70), position = "left") + 
+  theme_bw() +
+  theme(text = element_text(color = "grey20"),
+        axis.ticks.x = element_blank(),
+        axis.text = element_text(size = 18, color = "gray20"),
+        axis.text.x = element_text(hjust = 0),
+        axis.title.y = element_text(size = 18, vjust = 3),
+        axis.title.x = element_blank(),
+        legend.background = element_blank(),
+        legend.position = "bottom",
+        legend.justification = "center", 
+        legend.direction = "horizontal", 
+        legend.key = element_blank(),
+        legend.key.size = unit(0.3, "inches"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 18),
+        legend.text.align = 0,
+        panel.grid.major.y = element_blank(),
+        panel.grid.major.x = element_line(size = 0.5, linetype = 3, color = "gray60"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(linetype = 0),
+        panel.background = element_rect(fill = "white"),
+        plot.background = element_rect(fill = "white"),
+        plot.margin = unit(c(0.25, 0.5, 0.5, 0.25), "inches"),
+        plot.title = element_blank()
+  )
+
+
+```
+
+```{r esr_sig_test, include=FALSE}
+#Breakout ESR means and std. errors by Year
+#dataframe of esr means
+esr.mean <- select(esr.pct, Year, EsrLvl, Mean)
+esr.mean <- tidyr::spread(esr.mean, Year, Mean)
+#dataframe of std. errors
+esr.se <- select(esr.pct, Year, EsrLvl, SE)
+esr.se <- tidyr::spread(esr.se, Year, SE)
+
+#significance test of 2011 and 2015 difference
+#sig test if z < -1.96 or Z>1,96, results are significant at the 95 confidence level
+esr1115.z <- c()
+for(i in 1:nrow(esr.se)){
+  zscore <- (esr.mean$`2011`[i] - esr.mean$`2015`[i])/sqrt(esr.se$`2011`[i]^2 + esr.se$`2015`[i]^2)
+  esr1115.z <- c(zscore, esr1115.z)
+}
+
+if(all(esr1115.z > 1.96 | esr1115.z < -1.96)==TRUE) esr1115.zscore <- "Differences are significant at the 95% confidence level" else esr1115.zscore <- "Differences are not significant."
+
+```
+
+\columnsend
+
+
+## The ACS asks eight questions about income sources and amounts. Social Security is the most common source of income for Vietnam Veterans.
+
+```{r inc-vets, fig.align = 'center', out.width = '85%'}
+#set graphical parameters and colors
+par(mar = c(5,5,1,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of Personal Income VIETNAM VETS
+midpoints <- barplot(height = incvets$Per,
+                     names.arg = c("Public\nAssistance", "Supplementary\nSocial Security", "Self-\nEmployment", "Other", "Interest/\nRental", "Wages/Salary", "Retirement", "Social-\nSecurity"),
+                     horiz = TRUE,
+                     col = histcols,
+                     border = NA,
+                     xlim = c(0,100),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2, 
+                     cex.names = 0.6
+)
+
+#custom labels 
+text(x = incvets$Per + 8, y = midpoints, labels = format(round(incvets$Per, digits=1)),  col = "gray30")
+
+#X-axis label
+mtext("Percent of Vietnam Veterans*", side = 1, adj = 0.5, line = 2, las = 0, cex = 1.75, col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30",   lwd = 0, lwd.ticks = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+    
+\footnotesize **Total does not equal 100% because Veterans may receive income from one or more sources.*
+
+## Seventy-four percent of Vietnam Veterans (4.8 million) receive Social Security income. The average recieved is \$`r format(ssp.avg, big.mark= ",")`.
+
+\columnsbegin
+\column{.6\textwidth}
+```{r ssp_hist}
+
+#set graphical parametersest
+par(mar=c(5,6,4,2), cex = 1.75, col.lab="gray30", col.axis="gray30")
+
+#histogramalama!
+svyhist(~SSP, 
+        viet_design,
+        breaks = 14,
+        freq = TRUE,
+        border = "#ffffff",
+        col = histcols[8],
+        lwd = 0.4,
+        las = 1,
+        main = "",
+        xlab = NA,
+        ylab = NA, 
+        xlim = c(0, 50000),
+        ylim = c(0, 2500000),
+        axes = FALSE)
+
+#custom y- axis
+axis(side = 2, at = seq(0, 2500000, 500000), labels = seq(0, 25, 5), las = 1,  pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom y- axis Label
+title(ylab = "Number of Vietnam Veterans\n(in Hundred Thousands)", line = 3.5)
+#custom x axis
+axis(side = 1, at = seq(0, 50000, 10000), labels = seq(0, 50, 10), pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom x- axis Label
+title(xlab = "Social Security Income\n(in Thousands)", line = 3)
+
+#draw MEDIAN as reference line
+abline(v = ssp.qt, col = "red")
+text(x=ssp.qt+1000, y=2500000, labels =  paste("Median = ", format(ssp.qt, big.mark = ","), sep = ""), srt = 270, adj = c(0, 0), cex = 0.8, col = "gray30")
+
+#reset graph parameters
+par(opar)
+
+```
+
+```{r ssp_esr}
+#cross tabulate ESR against SSPO (whether SSP is > 0 )
+ssp.esr <- svytable(~factor(ESR) + factor(SSP0), viet_design, Ntotal = 100)
+ssp.esr <- round(ssp.esr, digits = 0)
+
+rownames(ssp.esr) <- c("At Work (Civilian)", "With Job NOT at Work (Civilian)", "Unemployed", "Not in Labor Force")
+colnames(ssp.esr) <- c("No", "Yes")
+
+kable(ssp.esr, format = "latex", digits = 1, row.names = TRUE, booktabs = TRUE) %>%
+  kable_styling(font_size = 5) %>% 
+  add_header_above(c("", "Social Security Income" = 2), bold = TRUE) %>% 
+  group_rows("Employment Status", 1, 4) %>% 
+  add_footnote(c("Values represent percentages")) 
+
+```
+
+\column{.4\textwidth}
+
+\begin{itemize}
+\item Social Security is the most common source of income for Vietnam Veterans.
+\newline
+\item Median Social Security income: \$13,300.
+\newline
+\item Fourteen percent of Veterans receiving a Social Security income are still at work in the civilian sector. 
+\newline
+\item Fifty-nine percent are not in the labor force while one percent are unemployed. 
+\end{itemize}
+\columnsend
+
+
+
+## Forty-five percent of Vietnam Veterans receive a retirement income - the second most common source.
+
+```{r retp_fac}
+#calculate ESR mean (%) for those  Vets with RETP income GREATER than zero
+retp.g.zero <- svymean(~factor(ESR), subset(viet_design, RETP > 0)) * 100
+retp.g.zero <- round(retp.g.zero, digits = 1)
+
+#calculate ESR mean (%) for those  Vets with RETP income greater EQUAL TO zero
+retp.zero <- svymean(~factor(ESR), subset(viet_design, RETP == 0)) * 100
+retp.zero <- round(retp.zero, digits = 1)
+
+retp01 <- svytotal(~factor(RETP0), viet_design, na.rm = TRUE)
+retp01 <- round(retp01[2]/1000000, digits =1)
+```
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r retp0_bar}
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = retp0,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(5,7)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = retp0 + 8, y = midpoints, labels = round(retp0, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Does the Veteran get a retirement income?", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+* Retirement income also includes survivor and disability pensions.  
+
+\vspace{2pt}
+* Percentage who are still working and getting a retirement income: **`r retp.g.zero[1]`.**
+\newline
+* Percentage who are not in the labor force and get no retirement income: **`r retp.zero[4]`.**
+
+\column{.5\textwidth}
+
+In the chart below, retirement income was broken up into discrete ranges. Since 54.6 percent of Veterans do not receive a retirement income a large part of the red bar below represents zeros.
+\vspace{18pt}
+
+```{r retp_bar}
+
+viet_design <- update(viet_design, RETP.Cat = cut(RETP, income.range, right = FALSE))
+
+retp <- svymean(~RETP.Cat, viet_design, na.rm = TRUE) * 100
+
+#set graphical parameters and colors
+par(mar = c(5,6,1,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of Personal Income VIETNAM VETS
+midpoints <- barplot(height = retp,
+                     names.arg = c("0-19", "20-39", "40-59", "60-79", "80-99", "100+"),
+                     horiz = TRUE,
+                     col = set1cols[1:6],
+                     border = NA,
+                     xlim = c(0,100),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+#custom labels 
+text(x = retp + 8, y = midpoints, labels = round(retp, digits=1),  col = "gray30")
+
+#Y-axis label
+mtext("Retirement Income\n(in Thousands)", side = 2, adj = 0.5, line = 4, las = 0, cex = 1.75, col = "gray30")
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.75, col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30",   lwd = 0, lwd.ticks = 2)
+
+#reset graph parameters
+par(opar)
+
+
+```
+
+\columnsend
+
+## Thirty-one percent of Vietnam Veterans earn a wage or salary.
+```{r wagp_fac}
+wagp.zero <- svymean(~factor(ESR), subset(viet_design, WAGP > 0)) * 100
+wagp.zero <- round(wagp.zero, digits = 0)
+
+#range of WAGP (where Wages is greater than zero)
+wagp.rng <- range(viet_design$variables$WAGP[viet_design$variables$WAGP >0])
+
+wagp01 <- svytotal(~factor(WAGP0), viet_design, na.rm = TRUE)
+wagp01 <- round(wagp01[2]/1000000, digits =1)
+
+```
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r wagp_bar}
+
+viet_design <- update(viet_design, WAGP.Cat = cut(WAGP, income.range, right = FALSE))
+
+wagp <- svymean(~WAGP.Cat, viet_design, na.rm = TRUE) * 100
+
+#set graphical parameters and colors
+par(mar = c(5,6,1,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of Personal Income VIETNAM VETS
+midpoints <- barplot(height = wagp,
+                     names.arg = c("0-19", "20-39", "40-59", "60-79", "80-99", "100+"),
+                     horiz = TRUE,
+                     col = set1cols[1:6],
+                     border = NA,
+                     xlim = c(0,100),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+#custom labels 
+text(x = wagp + 8, y = midpoints, labels = round(wagp, digits=1),  col = "gray30")
+
+#Y-axis label
+mtext("Wages or Salary Income\n(in Thousands)", side = 2, adj = 0.5, line = 4, las = 0, cex = 1.75, col = "gray30")
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.75, col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30",   lwd = 0, lwd.ticks = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\begin{itemize}
+\item The wage variable includes salaries, commissions, bonuses or tips.  
+\newline
+\item Wages/Salary income range from \$0 to \$658,000. 
+\newline
+\item Average Wages/Salary income: \$16,406.
+\end{itemize}
+\column{.5\textwidth}
+
+The histogram shows the distribution for the `r wagp01` million Veterans who earn Wages/Salary.
+
+```{r wagp_hist}
+#set graphical parametersest
+par(mar=c(5,6,4,2), cex=1.75, col.lab="gray30", col.axis="gray30")
+
+#histogramalama!
+svyhist(~WAGP, 
+        subset(viet_design, WAGP > 0),
+        breaks = 14,
+        freq = TRUE,
+        border = "#ffffff",
+        col = histcols[6],
+        lwd = 0.4,
+        las = 1,
+        main = "",
+        xlab = NA,
+        ylab = NA, 
+        xlim = c(0, 700000),
+        ylim = c(0, 1400000),
+        axes = FALSE)
+
+#custom y- axis
+axis(side = 2, at = seq(0, 1400000, 200000), labels = seq(0, 14, 2), las = 1,  pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom y- axis Label
+title(ylab = "Number of Vietnam Veterans\n(in Ten Thousands)", line = 3.5)
+
+#custom x axis
+axis(side = 1, at = seq(0, 700000, 100000), labels = seq(0, 7, 1), pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom x- axis Label
+title(xlab = "Wages and Salary\n(in Hundred Thousands)", line = 3)
+
+#draw Median as reference line
+abline(v = wagp.qt, col = "red")
+text(x=wagp.qt+10000, y=5900000, labels =  paste("Median = ",format(wagp.qt, big.mark = ","), sep = ""), srt = 270, adj = c(0, 0), cex = 0.8, col = "gray30")
+
+#reset graph parameters
+par(opar)
+
+```
+
+\columnsend
+
+
+## VA payments, unemployment compensation, alimony, and child support are included in the All Other Income question.  
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r oip_bar}
+
+viet_design <- update(viet_design, OIP.Cat = cut(OIP, income.range, right = FALSE))
+
+oip <- svymean(~OIP.Cat, viet_design, na.rm = TRUE) * 100
+
+#set graphical parameters and colors
+par(mar = c(5,6,1,4), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of Personal Income VIETNAM VETS
+midpoints <- barplot(height = oip,
+                     names.arg = c("0-19", "20-39", "40-59", "60-79", "80-99", "100+"),
+                     horiz = TRUE,
+                     col = set1cols[1:6],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+#custom labels 
+text(x = oip + 8, y = midpoints, labels = round(oip, digits=1),  col = "gray30")
+
+#Y-axis label
+mtext("All Other Income\n(in Thousands)", side = 2, adj = 0.5, line = 4, las = 0, cex = 1.75, col = "gray30")
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.75, col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30",   lwd = 0, lwd.ticks = 2)
+
+#reset graph parameters
+par(opar)
+
+
+
+```
+
+```{r oip_hist}
+#set graphical parameters
+par(mar=c(5,6,4,2), cex = 1.75, col.lab="gray30", col.axis="gray30")
+
+#histogramalama!
+svyhist(~OIP, 
+        viet_design,
+        breaks = 10,
+        freq = TRUE,
+        border = "#ffffff",
+        col = histcols[4],
+        lwd = 0.4,
+        las = 1,
+        main = "",
+        xlab = NA,
+        ylab = NA, 
+        xlim = c(0, 90000),
+        ylim = c(0, 6000000),
+        axes = FALSE)
+
+#custom y- axis
+axis(side = 2, at = seq(0, 6000000, 1200000), labels = seq(0, 60, 12), las = 1,  pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom y- axis Label
+title(ylab = "Number of Vietnam Veterans\n(in Hundred Thousands)", line = 3.5)
+
+#custom x axis
+axis(side = 1, at = seq(0, 90000, 10000), labels = seq(0, 90, 10), pos = NA, lwd = 0, lwd.tick = 2, col.ticks = "gray30", tick = TRUE, tck = -0.03)
+
+#custom x- axis Label
+title(xlab = "All Other Income\n(in Thousands)", line = 3)
+
+#draw 3rd quartile as reference line
+abline(v = oip.qt, col = "red")
+text(x=oip.qt+1000, y=6000000, labels =  paste("3rd Quartile = ", format(oip.qt, big.mark = ","), sep = ""), srt = 270, adj = c(0, 0), cex = 0.8, col = "gray30")
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+\begin{itemize}
+\item The third quartile (seventy-five percent of Veterans) of retirement income is zero. 
+\newline
+\item Twenty-two percent of Veterans receive this type of income.
+\newline
+\item The average amount received by these Veterans is \$15,764.
+\newline
+\item Most receive less than \$10,000.
+\newline
+\item The inclusion of many types of income obscures visibility into VA payments received by Veterans. 
+\end{itemize}
+
+\columnsend
+
+
+## Ninety-nine percent of Vietnam Veterans have some form of public or private insurance coverage. Fifty-four percent have both and one percent have neither. 
+
+\columnsbegin
+\column{.5\textwidth}
+```{r hicov}
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = ins[2:1],
+                     names.arg = c("Uninsured", "Insured"),
+                     horiz = TRUE,
+                     col = mycols[c(2, 4)],
+                     border = NA,
+                     xlim = c(0,120),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+                     )
+
+#Title
+mtext("Insurance Coverage:\nPrivate or Public", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#custom labels 
+text(x = ins[2:1] + 8, y = midpoints, labels = round(ins[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0, col.ticks = "gray30", cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+```{r pub-pvt-ins}
+par(cex.lab =1.7, col = "gray30", col.lab = "gray30")
+mosaicplot(pub.pvt,
+           main = NA,
+           xlab = NA,
+           ylab = "Private Insurance",
+           color = histcols[c(1,2)],
+           cex.axis = 1.6,
+           border = NA)
+mtext(text = "Public Insurance", side = 3, line = 1, cex = 1.5, col = "gray30")
+par(opar)
+
+```
+
+\columnsend
+\vspace{18pt}
+\begin{itemize}
+\item Public insurance includes Medicare, Medicaid and VA.
+\newline
+\item Private insurance includes Employer, Direct-Purchase and TRICARE/CHAMPUS.
+\end {itemize}
+
+## Medicare is the most common form of public insurance coverage. Seventy-six percent of Vietnam Veterans are covered by Medicare. 
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r hins3-mcare}
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins3[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(2,1)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = hins3[2:1] + 8, y = midpoints, labels = round(hins3[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Medicare", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+```
+
+```{r hins6-va}
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins6[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(6,5)],
+                     border = NA,
+                     xlim = c(0,100),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = hins6[2:1] + 8, y = midpoints, labels = round(hins6[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("VA Healthcare (Used or Enrolled)", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+```
+
+\column{.5\textwidth}
+
+```{r hins4-mcaid}
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins4[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(3, 4)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = hins4[2:1] + 8, y = midpoints, labels = round(hins4[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Medicaid", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\columnsend
+
+## Employer-based health insurance is the most common form of private coverage. 
+\columnsbegin
+\column{.5\textwidth}
+```{r hins1-emp}
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins1[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(8, 7)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = hins1[2:1] + 8, y = midpoints, labels = round(hins1[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30", cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Employer-Based", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+
+#reset graph parameters
+par(opar)
+
+```
+
+```{r hins2-dir}
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins2[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(9, 10)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+                     )
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+
+#custom labels 
+text(x = hins2[2:1] + 8, y = midpoints, labels = round(hins2[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Direct-Purchase", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+
+```{r hins5-tri}
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = hins5[2:1],
+                     names.arg = c("NOT\nCovered", "Covered"),
+                     horiz = TRUE,
+                     col = histcols[c(12, 11)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+                     )
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+
+#custom labels 
+text(x = hins5[2:1] + 8, y = midpoints, labels = round(hins5[2:1], digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("TRICARE/CHAMPUS", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\columnsend
+
+
+
+## Twenty-two percent of Vietnam Veterans claim a service-connected disability. Of these seventeen percent have used or are enrolled for VA health care. Five percent do not use VA. 
+
+\columnsbegin
+\column{.5\textwidth}
+
+```{r dratx}
+
+dratx <- svymean(~factor(DRATX), viet_design, na.rm = TRUE) * 100
+dratx <- dratx[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = dratx,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(3,4)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = dratx + 8, y = midpoints, labels = round(dratx, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("VA Service-Connected Disability", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+```{r dis}
+
+dis <- svymean(~factor(DIS), viet_design, na.rm = TRUE) * 100
+dis <- dis[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = dis,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = mycols[c(2, 4)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = dis + 8, y = midpoints, labels = round(dis, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Disability Status", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+
+```{r hins6.dratx}
+#cross-tabulate VA Healthcare Coverage (HINS6) with VA Service Connected Disability (DRATX)
+hins6.dratx <- svytable(~factor(HINS6) + factor(DRATX), viet_design, Ntotal = 100)
+rownames(hins6.dratx) <- c("Yes", "No")
+colnames(hins6.dratx) <- c("Yes", "No")
+
+par(cex.lab = 1.5, col = "gray30", col.lab = "gray30")
+mosaicplot(hins6.dratx,
+           main = NA,
+           xlab = NA,
+           ylab = "VA Service\nConnected Disability",
+           color = histcols[c(7,8)],
+           cex.axis = 1.4,
+           border = NA)
+mtext(text = "VA Health Care Coverage", side = 3, line = 1, cex = 1.5, col = "gray30")
+par(opar)
+
+
+```
+
+```{r drat}
+
+drat <- svymean(~factor(DRAT), viet_design, na.rm = TRUE) * 100
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = drat,
+                     names.arg = c("0%", "10-20%", "30-40%", "50-60%", "70% <", "Not\nReported"),
+                     horiz = TRUE,
+                     col = set1cols[1:6],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = drat + 8, y = midpoints, labels = format(round(drat, digits = 1)),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Service-Connected Disability Rating", side = 3, adj = 0, line = 1.5, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+
+```
+
+\columnsend
+
+## Difficulty walking and hearing are the two most common disabilities among Vietnam Veterans.
+
+\columnsbegin
+\column{.5\textwidth}
+\vspace{-4pt}
+```{r dphy, out.width = '75%'}
+
+dphy <- svymean(~factor(DPHY), viet_design, na.rm = TRUE) * 100
+dphy <- dphy[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = dphy,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(1,2)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = dphy + 8, y = midpoints, labels = round(dphy, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Difficulty Walking or Climbing Stairs", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+\vspace{-10pt}
+```{r dout, out.width = '75%'}
+
+dout <- svymean(~factor(DOUT), viet_design, na.rm = TRUE) * 100
+dout <- dout[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = dout,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(5,6)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = dout + 8, y = midpoints, labels = round(dout, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Independent Living Difficulty", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+
+```
+\vspace{-10pt}
+```{r ddrs, out.width = '75%'}
+
+ddrs <- svymean(~factor(DDRS), viet_design, na.rm = TRUE) * 100
+ddrs <- ddrs[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = ddrs,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(9,10)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = ddrs + 8, y = midpoints, labels = round(ddrs, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Difficulty Dressing Bathing", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+
+\column{.5\textwidth}
+\vspace{-4pt}
+```{r dear, out.width = '75%'}
+
+dear <- svymean(~factor(DEAR), viet_design, na.rm = TRUE) * 100
+dear <- dear[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = dear,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(3, 4)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = dear + 8, y = midpoints, labels = round(dear, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Deaf/Hearing Difficulty", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+\vspace{-10pt}
+```{r drem, out.width = '75%'}
+
+drem <- svymean(~factor(DREM), viet_design, na.rm = TRUE) * 100
+drem <- drem[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = drem,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(7,8)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = drem + 8, y = midpoints, labels = round(drem, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Cognitive Difficulty", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+\vspace{-10pt}
+```{r deye, out.width = '75%'}
+
+deye <- svymean(~factor(DEYE), viet_design, na.rm = TRUE) * 100
+deye <- deye[2:1]
+
+#set graphical parameters and colors
+par(mar = c(5,6,4,2), cex = 1.75, col.lab = "gray30", col.axis = "gray30")
+
+#barplot of 
+midpoints <- barplot(height = deye,
+                     names.arg = c("No", "Yes"),
+                     horiz = TRUE,
+                     col = histcols[c(11,12)],
+                     border = NA,
+                     xlim = c(0,110),
+                     axes = TRUE,
+                     xaxt = "n",
+                     las = 2
+)
+
+
+#X-axis label
+mtext("Percent of Vietnam Veterans", side = 1, adj = 0.5, line = 2.5, las = 0, cex = 1.5, col = "gray30")
+#custom labels 
+text(x = deye + 8, y = midpoints, labels = round(deye, digits = 1),  col = "gray30")
+
+#custom x-axis
+axis(side = 1, at = c(0,25,50,75,100), pos = 0.15, col.ticks = "gray30",  cex.axis = 1, lwd = 0, lwd.ticks = 1)
+
+#Title
+mtext("Blind/Seeing Difficulty", side = 3, adj = 0, line = 0.75, las = 0, cex = 1.75, col = "gray30", font = 2)
+
+#reset graph parameters
+par(opar)
+
+```
+\columnsend
+
+## Contact Information
+
+* This profile was prepared by the [\textcolor{blue}{National Center for Veterans Analysis and Statistics}](https://www.va.gov/vetdata/). For general inquiries, please email us at \textcolor{blue}{VANCVAS@va.gov}
+
+* The code and instructions to reproduce [\textcolor{blue}{this profile is available on GitHub }](https://github.com/mihiriyer/vietnam-finhealth).
