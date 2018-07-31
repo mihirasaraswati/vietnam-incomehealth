@@ -74,4 +74,4 @@ esr.df$EsrLvl <- factor(x = esr.df$EsrLvl, levels = unique(esr.df$EsrLvl), label
 #save df as Rds to be used elsewhere (i.e. making graphs)
 saveRDS(esr.df, "Data_ESR_Total_DF_2011_2015.Rds")
 
-rm(list=ls())
+# rm(list=ls())
